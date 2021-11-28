@@ -1,0 +1,22 @@
+# SSL server configuration with user authentication
+#
+server {
+    listen 443 ssl;
+    ssl on;
+    server_name 165.22.119.197;
+    ssl_certificate /etc/ssl/servercert.pem;
+    ssl_certificate_key /etc/ssl/serverkey.pem;
+    listen [::]:443 ssl default_server;
+
+    root /var/www/html;
+
+    index index.html index.htm index.nginx-debian.html;
+
+    location / {
+        # First attempt to serve request as file, then
+        # as directory, then fall back to displaying a 404.
+        try_files $uri $uri/ =404;
+        auth_basic "Restricted content: only authenticated users are allowed";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+    }
+}
