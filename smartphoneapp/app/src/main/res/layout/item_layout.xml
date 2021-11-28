@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipToPadding="false"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp">
+
+    <androidx.cardview.widget.CardView
+        android:id="@+id/device_card"
+        android:layout_width="match_parent"
+        android:layout_height="110dp"
+        android:layout_marginBottom="8dp"
+        app:cardCornerRadius="16dp">
+
+        <RelativeLayout
+            android:id="@+id/device_rl"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true">
+
+            <ImageView
+                android:id="@+id/device_img"
+                android:layout_width="110dp"
+                android:layout_height="match_parent"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:scaleType="centerCrop"
+                android:src="@mipmap/ic_camera" />
+
+            <LinearLayout
+                android:id="@+id/device_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_toEndOf="@id/device_img"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/device_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="2"
+                    android:text="IoT device #n"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Title"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/device_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="Camera #n"
+                    android:textAppearance="@style/TextAppearance.AppCompat.Title"
+                    android:textSize="16sp" />
+
+            </LinearLayout>
+
+        </RelativeLayout>
+
+    </androidx.cardview.widget.CardView>
+
+</LinearLayout>
