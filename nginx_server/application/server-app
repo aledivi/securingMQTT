@@ -1,0 +1,10 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 165.22.119.197;
+
+    location / {
+        include uwsgi_params;
+        uwsgi_pass unix:/usr/lib/server-app/server-app.sock;
+    }
+}
