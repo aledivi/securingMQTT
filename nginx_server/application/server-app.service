@@ -1,0 +1,13 @@
+[Unit]
+Description=uWSGI instance to serve server-app
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/usr/lib/server-app
+Environment="PATH=/usr/lib/server-app/py-env/bin"
+ExecStart=/usr/lib/server-app/py-env/bin/uwsgi --ini server-app.ini
+
+[Install]
+WantedBy=multi-user.target
