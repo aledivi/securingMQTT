@@ -89,7 +89,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
                 val current_time = LocalDateTime.now(ZoneOffset.UTC)
                 val formatter = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm:ss.SSS")
                 val ct_formatted = current_time.format(formatter)
-                val postUrl = "http://165.22.119.197:5000/" + device.number
+                val postUrl = "http://165.22.119.197/" + device.number
                 val postBody = "{\n" +
                         "\"timestamp\": \"${ct_formatted}\"\n" +
                         "}"
