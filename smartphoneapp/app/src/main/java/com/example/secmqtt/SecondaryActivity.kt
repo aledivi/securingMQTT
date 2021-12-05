@@ -1,8 +1,9 @@
 package com.example.secmqtt
 
-import android.content.Intent
-import android.net.Uri
-import android.os.*
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -14,34 +15,61 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.fasterxml.jackson.databind.ser.Serializers
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
+import okio.ByteString.Companion.toByteString
 import okio.IOException
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
+import java.nio.charset.StandardCharsets
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.*
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
-
+private lateinit var psk : SecretKey
+private lateinit var iv: ByteArray
 
 class SecondaryActivity : AppCompatActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_secondary)
+
+        psk = SecretKeySpec(readByteFile("psk"), "AES")
+        //iv = readByteFile("iv")
+
         val rv = findViewById<RecyclerView>(R.id.reciclerView)
         rv.layoutManager = LinearLayoutManager(this)
         val devices = (1..4).map{
             IoTDevice("$it", "camera#$it")
         }.toMutableList()
-
         val ioTDeviceAdapter = IoTDeviceAdapter(devices)
         rv.adapter = ioTDeviceAdapter
     }
+
+    fun readByteFile(filename: String) : ByteArray{
+        val path = getExternalFilesDir(null)
+        val file = File(path, filename)
+        val length = file.length().toInt()
+        val bytes = ByteArray(length)
+        val fin = FileInputStream(file)
+        try {
+            fin.read(bytes)
+        } finally {
+            fin.close()
+        }
+        return bytes
+    }
+
 }
 
 data class IoTDevice(val number:String, val name:String)
@@ -58,22 +86,19 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
             number.text = "IoT device #" + device.number
             name.text = device.name
             deviceRL.setOnClickListener {
-                /*val intent = Intent(
-                    Intent.ACTION_VIEW, Uri.parse("http://165.22.119.197:5000/" + device.number)
-                )
-                it.context.startActivity(intent)*/
-                val current_time = LocalDateTime.now()
-                val formatter = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm:ss")
+                val current_time = LocalDateTime.now(ZoneOffset.UTC)
+                val formatter = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm:ss.SSS")
                 val ct_formatted = current_time.format(formatter)
-                var postUrl = "http://165.22.119.197:5000/" + device.number
-                var postBody = "{" +
-                        "    \"timestamp\": \"${ct_formatted}\"\n" +
+                val postUrl = "http://165.22.119.197:5000/" + device.number
+                val postBody = "{\n" +
+                        "\"timestamp\": \"${ct_formatted}\"\n" +
                         "}"
 
+                val postBodyEncrypted = encrypt(postBody.replace("\n", ""))
+                Log.d("length", postBodyEncrypted.length.toString())
                 val JSON: MediaType? = "application/json; charset=utf-8".toMediaTypeOrNull()
                 val client = OkHttpClient()
-
-                val body = postBody.toRequestBody(JSON)
+                val body = postBodyEncrypted.toRequestBody(JSON)
                 val request: Request = Request.Builder()
                     .url(postUrl)
                     .post(body)
@@ -81,23 +106,31 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
 
                 client.newCall(request).enqueue(object : Callback {
                     override fun onFailure(call: Call, e: java.io.IOException) {
+                        Handler(Looper.getMainLooper()).post {
+                            Toast.makeText(
+                                it.context,
+                                "Internal server error",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                         call.cancel()
                     }
 
                     @Throws(IOException::class)
                     override fun onResponse(call: Call, response: Response) {
-                        Log.d("TAG_GG", "all goes well ")
                         val knowledge = response.body!!.bytes()
                         if (response.code >= HttpURLConnection.HTTP_OK &&
-                            response.code < HttpURLConnection.HTTP_MULT_CHOICE && response.body != null) {
-                            //Log.d("Response body: ", response.body!!.bytes().decodeToString())
+                            response.code < HttpURLConnection.HTTP_MULT_CHOICE && response.body != null
+                        ) {
                             val path = it.context.getExternalFilesDir(null)
                             val file = File(path, "C2_" + device.number)
-                            Log.d("dir", file.path)
                             FileOutputStream(file).use {
-                                it.write(knowledge)
+                                val decrypted = decrypt(knowledge)
+                                Log.d("knowledge", decrypted.toString())
+                                it.write(decrypted)
                             }
-                            val inputAsString = FileInputStream(file).bufferedReader().use { it.readText() }
+                            val inputAsString =
+                                FileInputStream(file).bufferedReader().use { it.readText() }
                             Log.d("from file", inputAsString)
                             Handler(Looper.getMainLooper()).post {
                                 Toast.makeText(
@@ -106,11 +139,54 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
+                        } else if (response.code === HttpURLConnection.HTTP_CLIENT_TIMEOUT) {
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(
+                                    it.context,
+                                    "Request time too old",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        } else if (response.code === HttpURLConnection.HTTP_UNAUTHORIZED) {
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(
+                                    it.context,
+                                    "Invalid client",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         }
+                    }
+                    fun decrypt(content: ByteArray): ByteArray{
+                        val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+                        cipher.init(Cipher.DECRYPT_MODE, psk)
+                        val plainText = cipher.doFinal(Base64.getDecoder().decode(content))
+                        return plainText
                     }
                 })
             }
         }
+
+        @RequiresApi(Build.VERSION_CODES.O)
+        fun encrypt(strToEncrypt: String) : String{
+            val input = strToEncrypt.toByteArray(charset("UTF8"))
+            synchronized(Cipher::class.java) {
+                val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+                Log.d("input size", input.size.toString())
+                cipher.init(Cipher.ENCRYPT_MODE, psk)
+                //Log.d("iv", iv.toString())
+                //Log.d("cipher iv", cipher.iv.toString())
+                val cipherText = ByteArray(cipher.getOutputSize(input.size))
+                Log.d("outputsize", cipherText.size.toString())
+                var ctLength = cipher.update(
+                    input, 0, input.size,
+                    cipherText, 0
+                )
+                ctLength += cipher.doFinal(cipherText, ctLength)
+                return Base64.getEncoder().encodeToString(cipherText)
+            }
+        }
+
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): IoTDeviceViewHolder {
