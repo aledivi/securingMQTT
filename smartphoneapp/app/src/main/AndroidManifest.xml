@@ -2,9 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.secmqtt">
 
+    <uses-permission android:name="android.permission.NFC"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="true"/>
+    <uses-sdk android:minSdkVersion="16"/>
     <application
         android:networkSecurityConfig="@xml/network_security_config"
         android:requestLegacyExternalStorage="true"
@@ -15,6 +20,16 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SecMQTT">
         <activity android:name=".SecondaryActivity"></activity>
+        <activity android:name=".NFCActivity">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data
+                    android:host="ext"
+                    android:pathPrefix="/com.example.secmqtt.com:nfcapp"
+                    android:scheme="vnd.android.nfc"/>
+            </intent-filter>
+        </activity>
         <activity
             android:name=".MainActivity"
             android:exported="true">
