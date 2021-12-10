@@ -1,0 +1,19 @@
+{
+    "clients": [
+        { 
+            "id": 1,
+            "keyfile": "psk1",
+            "is_valid": true 
+        },
+        { 
+             "id": 2,
+             "keyfile": "psk2",
+             "is_valid": true 
+        },
+        { 
+             "id": 3,
+             "keyfile": "psk3",
+             "is_valid": true 
+        }
+    ]
+} 
