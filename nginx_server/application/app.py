@@ -29,11 +29,15 @@ def handle_n_serve(number):
                     print("Wrong key")
                     return Response('Invalid client', 401, {'Connection':'close'})
                 if(check_time(jsoncontent["timestamp"])):
-                    encryptFile("./C2_" + number, psk)
-                    with open("./C2_1", "rb") as file:
+                    newfile = encryptFile("./C2_" + number, psk)
+                    ### 
+                    # just for debugging
+                    with open(newfile, "rb") as file:
                         # read the encrypted data
                         encrypted_data = file.read()
-                    return send_file("./C2_" + number, as_attachment=True)
+                        print(encrypted_data)
+                    ###
+                    return send_file(newfile, as_attachment=True)
                 else:
                     print('Request time too old')
                     return Response('Request time too old', 408, {'Connection':'close'})
@@ -43,12 +47,18 @@ def handle_n_serve(number):
 def encryptFile(filename, psk):
     with open(filename, "rb") as file:
         original = file.read()
+    print(original)
     cipher = AES.new(psk, AES.MODE_ECB)
     encoder = pkcs.Encoder(16)
     original_padded = encoder.encode(original)
+    print(len(original))
+    print(original_padded)
+    print(len(original_padded))
     encrypted_content = cipher.encrypt(original_padded)
-    with open(filename, "wb") as file:
+    newfile = filename + "_encrypted"
+    with open(newfile, "wb") as file:
         file.write(base64.b64encode(encrypted_content))
+    return newfile
 
 def getPSK(filename):
     keyfile = open(filename, "rb")
