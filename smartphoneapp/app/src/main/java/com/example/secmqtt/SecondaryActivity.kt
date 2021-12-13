@@ -1,5 +1,7 @@
 package com.example.secmqtt
 
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -15,11 +17,10 @@ import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.fasterxml.jackson.databind.ser.Serializers
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import okio.ByteString.Companion.toByteString
+import okhttp3.internal.wait
 import okio.IOException
 import java.io.File
 import java.io.FileInputStream
@@ -32,7 +33,6 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
-import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private lateinit var psk : SecretKey
@@ -52,7 +52,7 @@ class SecondaryActivity : AppCompatActivity() {
         val devices = (1..4).map{
             IoTDevice("$it", "camera#$it")
         }.toMutableList()
-        val ioTDeviceAdapter = IoTDeviceAdapter(devices)
+        val ioTDeviceAdapter = IoTDeviceAdapter(devices, applicationContext)
         rv.adapter = ioTDeviceAdapter
     }
 
@@ -74,15 +74,17 @@ class SecondaryActivity : AppCompatActivity() {
 
 data class IoTDevice(val number:String, val name:String)
 
-class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapter<IoTDeviceAdapter.IoTDeviceViewHolder>(){
+class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context): RecyclerView.Adapter<IoTDeviceAdapter.IoTDeviceViewHolder>(){
 
     class IoTDeviceViewHolder(v: View): RecyclerView.ViewHolder(v){
+        private lateinit var context: Context
         val number = v.findViewById<TextView>(R.id.device_number)
         val name = v.findViewById<TextView>(R.id.device_name)
         val deviceRL = v.findViewById<RelativeLayout>(R.id.device_rl)
 
         @RequiresApi(Build.VERSION_CODES.O)
-        fun bind(device: IoTDevice){
+        fun bind(device: IoTDevice, context: Context){
+            this.context = context
             number.text = "IoT device #" + device.number
             name.text = device.name
             deviceRL.setOnClickListener {
@@ -122,6 +124,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
                         if (response.code >= HttpURLConnection.HTTP_OK &&
                             response.code < HttpURLConnection.HTTP_MULT_CHOICE && response.body != null
                         ) {
+                            /*
                             val path = it.context.getExternalFilesDir(null)
                             val file = File(path, "C2_" + device.number)
                             FileOutputStream(file).use {
@@ -129,6 +132,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
                                 Log.d("knowledge", decrypted.toString())
                                 it.write(decrypted)
                             }
+
                             val inputAsString =
                                 FileInputStream(file).bufferedReader().use { it.readText() }
                             Log.d("from file", inputAsString)
@@ -138,7 +142,15 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
                                     "C2_" + device.number + " saved in " + path,
                                     Toast.LENGTH_LONG
                                 ).show()
+                            } */
+                            val payload = decrypt(knowledge)
+                            val intent = Intent(it.context, NFCActivity::class.java)
+                            intent.also {
+                                it.putExtra("payload", payload)
                             }
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            Log.d("payload", payload.toString())
+                            context.startActivity(intent)
                         } else if (response.code === HttpURLConnection.HTTP_CLIENT_TIMEOUT) {
                             Handler(Looper.getMainLooper()).post {
                                 Toast.makeText(
@@ -197,7 +209,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>): RecyclerView.Adapte
     //takes the holder and binds it the element at a given position (invoking bind fun)
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onBindViewHolder(holder: IoTDeviceViewHolder, position: Int) {
-        holder.bind(devices[position])
+        holder.bind(devices[position], context)
     }
 
     override fun getItemCount(): Int {

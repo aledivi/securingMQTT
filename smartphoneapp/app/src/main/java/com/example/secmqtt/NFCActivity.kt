@@ -23,13 +23,15 @@ class NFCActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_nfc)
-        //payload = intent.extras?.getByteArray("payload")!!
+        payload = intent.extras?.getByteArray("payload")!!
+        /*
         val path = getExternalFilesDir(null)
         val file = File(path, "C2_1")
         val inputAsString =
             FileInputStream(file).bufferedReader().use { it.readText() }
         payload = inputAsString.toByteArray()
         Log.d("inputAsString", inputAsString)
+        */
         Log.d("payload", payload.toString())
         mNfcAdapter = NfcAdapter.getDefaultAdapter(this)
     }
