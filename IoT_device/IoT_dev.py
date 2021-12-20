@@ -1,3 +1,27 @@
+import secrets
+from smartcard.System import readers
+from smartcard.util import toHexString, toASCIIString, toBytes
+import time
+from Crypto.PublicKey import RSA
+from Crypto.Protocol.KDF import PBKDF2
+import sys
+import secrets
+
+def generateKeyPair(k1, k2):
+    master_key = bytes(b1 ^ b2 for (b1, b2) in zip(k1, k2)) # to simulate completion of final knowledge
+
+    def my_rand(n):
+        return PBKDF2(master_key, secrets.token_bytes(16), dkLen=n)
+
+    RSA_key = RSA.generate(1024, randfunc=my_rand)
+    return RSA_key
+
+def acquireK1():
+    f = open(sys.argv[1], "rb")
+    k1 = f.read()
+    f.close()
+    return k1
+
 def waitCard(connection):
     try:
         connection.connect()
@@ -87,6 +111,9 @@ def readCard(connection):
     typestring = toASCIIString(toBytes(typefield))
     k2 = bytearray.fromhex(payload)
     return k2[23:], typestring
+
+k1 = acquireK1()
+
 r = readers()
 if len(r) < 1:
 	print("error: No readers available!")
@@ -110,3 +137,7 @@ while(True):
 k2, typestring = readCard(connection)
 print("Type: " + typestring)
 print(k2)
+
+RSA_key = generateKeyPair(k1, k2)
+print(RSA_key)
+print(RSA_key.export_key(format = 'PEM', pkcs=8))
