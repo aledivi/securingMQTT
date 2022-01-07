@@ -8,7 +8,7 @@ import sys
 import secrets
 
 def generateKeyPair(k1, k2):
-    master_key = bytes(b1 ^ b2 for (b1, b2) in zip(k1, k2)) # to simulate completion of final knowledge
+    master_key = bytes(b1 ^ b2 for (b1, b2) in zip(k1, k2)) # to have completion of final knowledge
 
     def my_rand(n):
         return PBKDF2(master_key, secrets.token_bytes(16), dkLen=n)
@@ -32,7 +32,7 @@ def waitCard(connection):
 
 def readCard(connection):
     end = False
-    i = 1
+    i = 1 # start from sector 1
     typefield = ""  
     payload = ""
     while not end:
@@ -53,30 +53,70 @@ def readCard(connection):
             sys.exit()
 	
         print("---------------------------------Sector "+ str(i) +"---------------------------------")
-        for block in range(i*4, i*4+3): #because last block of each sector is the key
+        for block in range(i*4, i*4+3): # because last block of each sector is the key
             COMMAND = [0xFF, 0xB0, 0x00]
             COMMAND.append(block)
             COMMAND.append(16)    
             data, sw1, sw2 = connection.transmit(COMMAND)
             blockdata = toHexString(data).replace(" ","")
             if(block==4): # first block
-                if(blockdata[:6]!="000003"):
-                    print("NO ndef format found")
+
+                ndefFormat = False
+                j = 1
+                while(not ndefFormat):
+                    if(blockdata[2*(j-1):2*j]!="03"):
+                        if(blockdata[2*(j-1):2*j]=="00"):
+                            print("Ignore byte #" + str(j))
+                            j = j + 1
+                        else:
+                            print("NO ndef format found")
+                            sys.exit()
+                    else:
+                        ndefFormat = True
+                
+                length = blockdata[j*2:(j+1)*2]
+                if(length=="00"):
+                    print("NO value")
                     sys.exit()
-            
-                #length = int(blockdata[6:8],16)
-                typelength = int(blockdata[10:12],16)
-                payloadlength = int(blockdata[12:14],16)
-                if(typelength<=9):
-                    typefield = typefield + blockdata[14:14+typelength*2]
-                    if(14+typelength*2<32):
-                        payload = payload + blockdata[14+typelength*2:]
-                        payloadlength = payloadlength - 32 - 14 - typelength*2
-                    typelength = 0
+                if(length=="FF"):
+                    j = j + 1
+                    length = int(blockdata[j*2:(j+2)*2],16)
                 else:
-                    typefield = typefield + blockdata[14:]
-                    typelength -= 9
+                    length = int(blockdata[j*2:(j+1)*2],16)
+                print("Total length = " + str(length))
+                
+                j=j+2
+                typelength = blockdata[j*2:(j+1)*2]
+                if(typelength=="00"):
+                    print("NO type field")
+                if(typelength=="FF"):
+                    j = j + 1
+                    typelength = int(blockdata[j*2:(j+2)*2],16)
+                else:
+                    typelength = int(blockdata[j*2:(j+1)*2],16)
+                print("Type length = " + str(typelength))
+
+                j = j + 1
+                payloadlength = blockdata[j*2:(j+1)*2]
+                if(payloadlength=="FF"):
+                    j = j + 1
+                    payloadlength = int(blockdata[j*2:(j+2)*2],16)
+                else:
+                    payloadlength = int(blockdata[j*2:(j+1)*2],16)
+                print("Payload length = " + str(payloadlength))
+                
+                j = j + 1
+                if(j<16):
+                    if(typelength+j>=16):
+                        typefield = typefield + blockdata[j*2:]
+                    else:
+                        typefield = typefield + blockdata[j*2:j*2+typelength*2]
+                        payload = payload + blockdata[j*2+typelength*2:]
+                        payloadlength = payloadlength - (16 - j - typelength)
+                    typelength = typelength - (16 - j)
+                    print("Type length = " + str(typelength))
             else:
+                print("Payload length = " + str(payloadlength))
                 if(typelength>0): # not first block but typefield to read
                     if(typelength<=16):
                         if(typelength==16):
@@ -84,14 +124,14 @@ def readCard(connection):
                         else:
                             typefield = typefield + blockdata[:typelength*2]
                             payload = payload + blockdata[typelength*2:]
-                            payloadlength = payloadlength - typelength*2
+                            payloadlength = payloadlength - (16-typelength)
                         typelength = 0
                     else:
                         typefield = typefield + blockdata
                         typelength -= 16
                 else:
                     if(payloadlength<=16):
-                        payload += blockdata[:payloadlength*2-2] #discard terminator FE
+                        payload += blockdata[:payloadlength*2] 
                         payloadlength = 0
                         end = True
                     else:
@@ -109,6 +149,7 @@ def readCard(connection):
         i = i+1 
 
     typestring = toASCIIString(toBytes(typefield))
+    print(payload)
     k2 = bytearray.fromhex(payload)
     return k2[23:], typestring
 
@@ -125,7 +166,6 @@ reader = r[0]
 print("Using: ", reader)
 
 connection = reader.createConnection()
-#connection.connect()
 while(True):
     if(waitCard(connection)):
         print("Smartcard revealed")
