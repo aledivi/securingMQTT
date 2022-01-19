@@ -14,6 +14,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.*
 
 class NFCActivity : Activity() {
 
@@ -39,14 +40,14 @@ class NFCActivity : Activity() {
     override fun onResume() {
         super.onResume()
         mNfcAdapter?.let {
-            enableNFCInForeground(it, this,javaClass)
+            enableNFCInForeground(it, this, javaClass)
         }
     }
 
     override fun onPause() {
         super.onPause()
         mNfcAdapter?.let {
-            disableNFCInForeground(it,this)
+            disableNFCInForeground(it, this)
         }
     }
 
@@ -54,43 +55,57 @@ class NFCActivity : Activity() {
         super.onNewIntent(intent)
         val messageWrittenSuccessfully = createNFCMessage(payload, intent)
         val resultTextView = findViewById<TextView>(R.id.nfc_text)
-        resultTextView.text = ifElse(messageWrittenSuccessfully,"Successful Written to Tag","Something When wrong Try Again")
+        resultTextView.text = ifElse(
+            messageWrittenSuccessfully,
+            "Successful Written to Tag",
+            "Something was wrong\nTry Again"
+        )
     }
 
 
-    fun<T> ifElse(condition: Boolean, primaryResult: T, secondaryResult: T) = if (condition) primaryResult else secondaryResult
+    fun <T> ifElse(condition: Boolean, primaryResult: T, secondaryResult: T) =
+        if (condition) primaryResult else secondaryResult
 
-    fun createNFCMessage(payload: ByteArray, intent: Intent?) : Boolean {
+    fun createNFCMessage(payload: ByteArray, intent: Intent?): Boolean {
 
         val pathPrefix = "com.example.secmqtt.com:nfcapp"
-        val nfcRecord = NdefRecord(NdefRecord.TNF_EXTERNAL_TYPE, pathPrefix.toByteArray(), ByteArray(0), payload)
+        val nfcRecord = NdefRecord(
+            NdefRecord.TNF_EXTERNAL_TYPE,
+            pathPrefix.toByteArray(),
+            ByteArray(0),
+            payload
+        )
         Log.d("nfcRecord", nfcRecord.toString())
         val nfcMessage = NdefMessage(arrayOf(nfcRecord))
         Log.d("nfcMessage", nfcMessage.toString())
         intent?.let {
             val tag = it.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-            return  writeMessageToTag(nfcMessage, tag)
+            return writeMessageToTag(nfcMessage, tag)
         }
         return false
     }
 
     fun <T> enableNFCInForeground(nfcAdapter: NfcAdapter, activity: Activity, classType: Class<T>) {
-        val pendingIntent = PendingIntent.getActivity(activity, 0,
-            Intent(activity, classType).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0)
+        val pendingIntent = PendingIntent.getActivity(
+            activity, 0,
+            Intent(activity, classType).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), 0
+        )
         val nfcIntentFilter = IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED)
         val filters = arrayOf(nfcIntentFilter)
 
-        val TechLists = arrayOf(arrayOf(Ndef::class.java.name), arrayOf(NdefFormatable::class.java.name))
+        val TechLists =
+            arrayOf(arrayOf(Ndef::class.java.name), arrayOf(NdefFormatable::class.java.name))
 
         nfcAdapter.enableForegroundDispatch(activity, pendingIntent, filters, TechLists)
     }
 
-    fun disableNFCInForeground(nfcAdapter: NfcAdapter,activity: Activity) {
+    fun disableNFCInForeground(nfcAdapter: NfcAdapter, activity: Activity) {
         nfcAdapter.disableForegroundDispatch(activity)
     }
 
     private fun writeMessageToTag(nfcMessage: NdefMessage, tag: Tag?): Boolean {
 
+        Log.d("Tech type", Arrays.toString(tag!!.techList))
         try {
             val nDefTag = Ndef.get(tag)
 

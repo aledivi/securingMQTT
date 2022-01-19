@@ -20,13 +20,10 @@ import androidx.recyclerview.widget.RecyclerView
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.internal.wait
 import okio.IOException
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
-import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -38,11 +35,11 @@ import javax.crypto.spec.SecretKeySpec
 private lateinit var psk : SecretKey
 private lateinit var iv: ByteArray
 
-class SecondaryActivity : AppCompatActivity() {
+class ListActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_secondary)
+        setContentView(R.layout.activity_list)
 
         psk = SecretKeySpec(readByteFile("psk"), "AES")
         //iv = readByteFile("iv")
@@ -112,7 +109,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context
                             Toast.makeText(
                                 it.context,
                                 "Internal server error",
-                                Toast.LENGTH_LONG
+                                Toast.LENGTH_SHORT
                             ).show()
                         }
                         call.cancel()
@@ -156,7 +153,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context
                                 Toast.makeText(
                                     it.context,
                                     "Request time too old",
-                                    Toast.LENGTH_LONG
+                                    Toast.LENGTH_SHORT
                                 ).show()
                             }
                         } else if (response.code === HttpURLConnection.HTTP_UNAUTHORIZED) {
@@ -164,7 +161,7 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context
                                 Toast.makeText(
                                     it.context,
                                     "Invalid client",
-                                    Toast.LENGTH_LONG
+                                    Toast.LENGTH_SHORT
                                 ).show()
                             }
                         }

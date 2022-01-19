@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="?backgroundColor">
-
+<!--
     <ImageView
         android:id="@+id/nfc_image"
         android:layout_height="wrap_content"
@@ -15,7 +15,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/nfc_text"
         app:srcCompat="@drawable/nfc" />
-
+-->
     <TextView
         android:id="@+id/nfc_text"
         android:layout_width="wrap_content"
@@ -25,7 +25,7 @@
         android:textAppearance="@style/TextAppearance.AppCompat.Large"
         android:textSize="24sp"
         android:padding="16dp"
-        app:layout_constraintBottom_toTopOf="@+id/nfc_image"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"/>
