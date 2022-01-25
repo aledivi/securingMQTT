@@ -23,6 +23,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okio.IOException
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.net.HttpURLConnection
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -41,7 +42,7 @@ class ListActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_list)
 
-        psk = SecretKeySpec(readByteFile("psk"), "AES")
+        //psk = SecretKeySpec(readByteFile("psk"), "AES")
         //iv = readByteFile("iv")
 
         val rv = findViewById<RecyclerView>(R.id.reciclerView)
@@ -52,7 +53,7 @@ class ListActivity : AppCompatActivity() {
         val ioTDeviceAdapter = IoTDeviceAdapter(devices, applicationContext)
         rv.adapter = ioTDeviceAdapter
     }
-
+/*
     fun readByteFile(filename: String) : ByteArray{
         val path = getExternalFilesDir(null)
         val file = File(path, filename)
@@ -66,7 +67,7 @@ class ListActivity : AppCompatActivity() {
         }
         return bytes
     }
-
+*/
 }
 
 data class IoTDevice(val number:String, val name:String)
@@ -79,49 +80,78 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context
         val name = v.findViewById<TextView>(R.id.device_name)
         val deviceRL = v.findViewById<RelativeLayout>(R.id.device_rl)
 
+        fun readByteFile(filename: String) : ByteArray?{
+            val path = context.getExternalFilesDir(null)
+            val file = File(path, filename)
+            val length = file.length().toInt()
+            val bytes = ByteArray(length)
+            try {
+                val fin = FileInputStream(file)
+                try {
+                    fin.read(bytes)
+                } finally {
+                    fin.close()
+                }
+                return bytes
+            }
+            catch (e : FileNotFoundException){
+                return null
+            }
+        }
+
         @RequiresApi(Build.VERSION_CODES.O)
         fun bind(device: IoTDevice, context: Context){
             this.context = context
             number.text = "IoT device #" + device.number
             name.text = device.name
             deviceRL.setOnClickListener {
-                val current_time = LocalDateTime.now(ZoneOffset.UTC)
-                val formatter = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm:ss.SSS")
-                val ct_formatted = current_time.format(formatter)
-                val postUrl = "http://165.22.119.197/" + device.number
-                val postBody = "{\n" +
-                        "\"timestamp\": \"${ct_formatted}\"\n" +
-                        "}"
+                val pskfile = readByteFile("psk" + device.number)
+                if(pskfile==null){
+                    Toast.makeText(
+                        it.context,
+                        "Invalid client",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                else {
+                    psk = SecretKeySpec(pskfile, "AES")
+                    val current_time = LocalDateTime.now(ZoneOffset.UTC)
+                    val formatter = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm:ss.SSS")
+                    val ct_formatted = current_time.format(formatter)
+                    val postUrl = "http://165.22.119.197/" + device.number
+                    val postBody = "{\n" +
+                            "\"timestamp\": \"${ct_formatted}\"\n" +
+                            "}"
 
-                val postBodyEncrypted = encrypt(postBody.replace("\n", ""))
-                Log.d("length", postBodyEncrypted.length.toString())
-                val JSON: MediaType? = "application/json; charset=utf-8".toMediaTypeOrNull()
-                val client = OkHttpClient()
-                val body = postBodyEncrypted.toRequestBody(JSON)
-                val request: Request = Request.Builder()
-                    .url(postUrl)
-                    .post(body)
-                    .build()
+                    val postBodyEncrypted = encrypt(postBody.replace("\n", ""))
+                    Log.d("length", postBodyEncrypted.length.toString())
+                    val JSON: MediaType? = "application/json; charset=utf-8".toMediaTypeOrNull()
+                    val client = OkHttpClient()
+                    val body = postBodyEncrypted.toRequestBody(JSON)
+                    val request: Request = Request.Builder()
+                        .url(postUrl)
+                        .post(body)
+                        .build()
 
-                client.newCall(request).enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: java.io.IOException) {
-                        Handler(Looper.getMainLooper()).post {
-                            Toast.makeText(
-                                it.context,
-                                "Internal server error",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                    client.newCall(request).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: java.io.IOException) {
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(
+                                    it.context,
+                                    "Internal server error",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                            call.cancel()
                         }
-                        call.cancel()
-                    }
 
-                    @Throws(IOException::class)
-                    override fun onResponse(call: Call, response: Response) {
-                        val knowledge = response.body!!.bytes()
-                        if (response.code >= HttpURLConnection.HTTP_OK &&
-                            response.code < HttpURLConnection.HTTP_MULT_CHOICE && response.body != null
-                        ) {
-                            /*
+                        @Throws(IOException::class)
+                        override fun onResponse(call: Call, response: Response) {
+                            val knowledge = response.body!!.bytes()
+                            if (response.code >= HttpURLConnection.HTTP_OK &&
+                                response.code < HttpURLConnection.HTTP_MULT_CHOICE && response.body != null
+                            ) {
+                                /*
                             val path = it.context.getExternalFilesDir(null)
                             val file = File(path, "C2_" + device.number)
                             FileOutputStream(file).use {
@@ -140,39 +170,41 @@ class IoTDeviceAdapter(val devices: MutableList<IoTDevice>, val context: Context
                                     Toast.LENGTH_LONG
                                 ).show()
                             } */
-                            val payload = decrypt(knowledge)
-                            val intent = Intent(it.context, NFCActivity::class.java)
-                            intent.also {
-                                it.putExtra("payload", payload)
-                            }
-                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            Log.d("payload", payload.toString())
-                            context.startActivity(intent)
-                        } else if (response.code === HttpURLConnection.HTTP_CLIENT_TIMEOUT) {
-                            Handler(Looper.getMainLooper()).post {
-                                Toast.makeText(
-                                    it.context,
-                                    "Request time too old",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        } else if (response.code === HttpURLConnection.HTTP_UNAUTHORIZED) {
-                            Handler(Looper.getMainLooper()).post {
-                                Toast.makeText(
-                                    it.context,
-                                    "Invalid client",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                val payload = decrypt(knowledge)
+                                val intent = Intent(it.context, NFCActivity::class.java)
+                                intent.also {
+                                    it.putExtra("payload", payload)
+                                }
+                                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                Log.d("payload", payload.toString())
+                                context.startActivity(intent)
+                            } else if (response.code === HttpURLConnection.HTTP_CLIENT_TIMEOUT) {
+                                Handler(Looper.getMainLooper()).post {
+                                    Toast.makeText(
+                                        it.context,
+                                        "Request time too old",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else if (response.code === HttpURLConnection.HTTP_UNAUTHORIZED) {
+                                Handler(Looper.getMainLooper()).post {
+                                    Toast.makeText(
+                                        it.context,
+                                        "Invalid client",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         }
-                    }
-                    fun decrypt(content: ByteArray): ByteArray{
-                        val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
-                        cipher.init(Cipher.DECRYPT_MODE, psk)
-                        val plainText = cipher.doFinal(Base64.getDecoder().decode(content))
-                        return plainText
-                    }
-                })
+
+                        fun decrypt(content: ByteArray): ByteArray {
+                            val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+                            cipher.init(Cipher.DECRYPT_MODE, psk)
+                            val plainText = cipher.doFinal(Base64.getDecoder().decode(content))
+                            return plainText
+                        }
+                    })
+                }
             }
         }
 
