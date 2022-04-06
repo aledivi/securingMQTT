@@ -36,18 +36,20 @@ def readCard(connection):
         COMMAND = [0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, i*4, 0x60, 0x00]
         data, sw1, sw2 = connection.transmit(COMMAND)
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: Decryption sector "+ str(i) +" using key #0 as Key A successful.")
+            #print("Status: Decryption sector "+ str(i) +" using key #0 as Key A successful.")
+            print()
         elif (sw1, sw2) == (0x63, 0x0):
-            print("Status: Decryption sector "+ str(i) +" failed. Trying as Key B")
+            #print("Status: Decryption sector "+ str(i) +" failed. Trying as Key B")
             COMMAND = [0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, i*4, 0x61, 0x00]
             data, sw1, sw2 = connection.transmit(COMMAND)
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: Decryption sector "+ str(i) +" using key #0 as Key B successful.")
+            #print("Status: Decryption sector "+ str(i) +" using key #0 as Key B successful.")
+            print()
         elif (sw1, sw2) == (0x63, 0x0):
             print("Status: Decryption sector "+ str(i) +" failed.")
             sys.exit()
 	
-        print("---------------------------------Sector "+ str(i) +"---------------------------------")
+        #print("---------------------------------Sector "+ str(i) +"---------------------------------")
         for block in range(i*4, i*4+3): # because last block of each sector is the key
             COMMAND = [0xFF, 0xB0, 0x00]
             COMMAND.append(block)
@@ -61,7 +63,7 @@ def readCard(connection):
                 while(not ndefFormat):
                     if(blockdata[2*(j-1):2*j]!="03"):
                         if(blockdata[2*(j-1):2*j]=="00"):
-                            print("Ignore byte #" + str(j))
+                            #print("Ignore byte #" + str(j))
                             j = j + 1
                         else:
                             print("NO ndef format found")
@@ -78,7 +80,7 @@ def readCard(connection):
                     length = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     length = int(blockdata[j*2:(j+1)*2],16)
-                print("Total length = " + str(length))
+                #print("Total length = " + str(length))
                 
                 j=j+2
                 typelength = blockdata[j*2:(j+1)*2]
@@ -89,7 +91,7 @@ def readCard(connection):
                     typelength = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     typelength = int(blockdata[j*2:(j+1)*2],16)
-                print("Type length = " + str(typelength))
+                #print("Type length = " + str(typelength))
 
                 j = j + 1
                 payloadlength = blockdata[j*2:(j+1)*2]
@@ -98,7 +100,7 @@ def readCard(connection):
                     payloadlength = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     payloadlength = int(blockdata[j*2:(j+1)*2],16)
-                print("Payload length = " + str(payloadlength))
+                #print("Payload length = " + str(payloadlength))
                 
                 j = j + 1
                 if(j<16):
@@ -109,9 +111,9 @@ def readCard(connection):
                         payload = payload + blockdata[j*2+typelength*2:]
                         payloadlength = payloadlength - (16 - j - typelength)
                     typelength = typelength - (16 - j)
-                    print("Type length = " + str(typelength))
+                    #print("Type length = " + str(typelength))
             else:
-                print("Payload length = " + str(payloadlength))
+                #print("Payload length = " + str(payloadlength))
                 if(typelength>0): # not first block but typefield to read
                     if(typelength<=16):
                         if(typelength==16):
@@ -133,18 +135,20 @@ def readCard(connection):
                         payload += blockdata
                         payloadlength -= 16
 
-            print("block "+ str(block) +":\t"+ toHexString(data) +" | "+''.join(chr(j) for j in data))
+            #print("block "+ str(block) +":\t"+ toHexString(data) +" | "+''.join(chr(j) for j in data))
 
-        print("Status words: %02X %02X" % (sw1, sw2))
+        #print("Status words: %02X %02X" % (sw1, sw2))
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: The operation completed successfully.")
+            #print("Status: The operation completed successfully.")
+            ok = True
         elif (sw1, sw2) == (0x63, 0x0):
-            print("Status: The operation failed. Maybe auth is needed.")
+            #print("Status: The operation failed. Maybe auth is needed.")
+            ok = False
     
         i = i+1 
 
     typestring = toASCIIString(toBytes(typefield))
-    print(payload)
+    #print(payload)
     k2 = bytearray.fromhex(payload)
     return k2, typestring
 
@@ -155,10 +159,10 @@ if len(r) < 1:
 	print("error: No readers available!")
 	sys.exit()
 
-print("Available readers: ", r)
+#print("Available readers: ", r)
 
 reader = r[0]
-print("Using: ", reader)
+#print("Using: ", reader)
 
 connection = reader.createConnection()
 while(True):
@@ -170,10 +174,12 @@ while(True):
         continue
 
 k2, typestring = readCard(connection)
-print("Type: " + typestring)
-print(k2)
+#print("Type: " + typestring)
+print("K1 = ", k1.hex())
+print("K2 = ", k2.hex())
 
 master_key = generateFinalKnowledge(k1, k2)
+print("MK = ", master_key.hex())
 
 ############
 def on_message(client, userdata, message):
@@ -181,18 +187,18 @@ def on_message(client, userdata, message):
     encryptedmessage = message.payload
     paddedtext = decipher.decrypt(encryptedmessage)
     originalmessage = unpad(paddedtext, AES.block_size).decode("utf-8", "ignore")
-    print("message received ", str(encryptedmessage))
-    print('message decrypted ', str(originalmessage))
+    print("Message received =", str(encryptedmessage.hex()))
+    print('Message decrypted =', str(originalmessage))
 ############
 
 broker_address="broker.hivemq.com"
-print("creating new subscriber instance")
+print("Creating new subscriber instance")
 client = mqtt.Client("braintech_subscriber") #create new instance
 client.on_message=on_message #attach function to callback
-print("connecting to broker")
+#print("connecting to broker")
 client.connect(broker_address) #connect to broker
 client.loop_start() #start the loop
-print("Subscribing to topic","braintech/tesi/test1")
-client.subscribe("braintech/tesi/test1")
-time.sleep(60) #wait
+print("Subscribing to topic","braintech/masterdegree/test")
+client.subscribe("braintech/masterdegree/test")
+time.sleep(30) #wait
 client.loop_stop() #stop the loop
