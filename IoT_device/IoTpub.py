@@ -1,10 +1,18 @@
+from multiprocessing import Lock
+from unittest.mock import sentinel
 import paho.mqtt.client as mqtt
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
+from Crypto.Random import get_random_bytes
 from smartcard.System import readers
 from smartcard.util import toHexString, toASCIIString, toBytes
 import time
 import sys
+import threading 
+
+lock = threading.Lock()
+cv = threading.Lock()
+sent = 0
 
 def generateFinalKnowledge(k1, k2):
     master_key = bytes(b1 ^ b2 for (b1, b2) in zip(k1, k2)) # to have completion of final knowledge
@@ -35,18 +43,20 @@ def readCard(connection):
         COMMAND = [0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, i*4, 0x60, 0x00]
         data, sw1, sw2 = connection.transmit(COMMAND)
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: Decryption sector "+ str(i) +" using key #0 as Key A successful.")
+            #print("Status: Decryption sector "+ str(i) +" using key #0 as Key A successful.")
+            print()
         elif (sw1, sw2) == (0x63, 0x0):
-            print("Status: Decryption sector "+ str(i) +" failed. Trying as Key B")
+            #print("Status: Decryption sector "+ str(i) +" failed. Trying as Key B")
             COMMAND = [0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, i*4, 0x61, 0x00]
             data, sw1, sw2 = connection.transmit(COMMAND)
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: Decryption sector "+ str(i) +" using key #0 as Key B successful.")
+            #print("Status: Decryption sector "+ str(i) +" using key #0 as Key B successful.")
+            print()
         elif (sw1, sw2) == (0x63, 0x0):
-            print("Status: Decryption sector "+ str(i) +" failed.")
+            #print("Status: Decryption sector "+ str(i) +" failed.")
             sys.exit()
 	
-        print("---------------------------------Sector "+ str(i) +"---------------------------------")
+        #print("---------------------------------Sector "+ str(i) +"---------------------------------")
         for block in range(i*4, i*4+3): # because last block of each sector is the key
             COMMAND = [0xFF, 0xB0, 0x00]
             COMMAND.append(block)
@@ -60,7 +70,7 @@ def readCard(connection):
                 while(not ndefFormat):
                     if(blockdata[2*(j-1):2*j]!="03"):
                         if(blockdata[2*(j-1):2*j]=="00"):
-                            print("Ignore byte #" + str(j))
+                            #print("Ignore byte #" + str(j))
                             j = j + 1
                         else:
                             print("NO ndef format found")
@@ -77,7 +87,7 @@ def readCard(connection):
                     length = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     length = int(blockdata[j*2:(j+1)*2],16)
-                print("Total length = " + str(length))
+                #print("Total length = " + str(length))
                 
                 j=j+2
                 typelength = blockdata[j*2:(j+1)*2]
@@ -88,7 +98,7 @@ def readCard(connection):
                     typelength = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     typelength = int(blockdata[j*2:(j+1)*2],16)
-                print("Type length = " + str(typelength))
+                #print("Type length = " + str(typelength))
 
                 j = j + 1
                 payloadlength = blockdata[j*2:(j+1)*2]
@@ -97,7 +107,7 @@ def readCard(connection):
                     payloadlength = int(blockdata[j*2:(j+2)*2],16)
                 else:
                     payloadlength = int(blockdata[j*2:(j+1)*2],16)
-                print("Payload length = " + str(payloadlength))
+                #print("Payload length = " + str(payloadlength))
                 
                 j = j + 1
                 if(j<16):
@@ -108,9 +118,9 @@ def readCard(connection):
                         payload = payload + blockdata[j*2+typelength*2:]
                         payloadlength = payloadlength - (16 - j - typelength)
                     typelength = typelength - (16 - j)
-                    print("Type length = " + str(typelength))
+                    #print("Type length = " + str(typelength))
             else:
-                print("Payload length = " + str(payloadlength))
+                #print("Payload length = " + str(payloadlength))
                 if(typelength>0): # not first block but typefield to read
                     if(typelength<=16):
                         if(typelength==16):
@@ -132,66 +142,74 @@ def readCard(connection):
                         payload += blockdata
                         payloadlength -= 16
 
-            print("block "+ str(block) +":\t"+ toHexString(data) +" | "+''.join(chr(j) for j in data))
+            #print("block "+ str(block) +":\t"+ toHexString(data) +" | "+''.join(chr(j) for j in data))
 
-        print("Status words: %02X %02X" % (sw1, sw2))
+        #print("Status words: %02X %02X" % (sw1, sw2))
         if (sw1, sw2) == (0x90, 0x0):
-            print("Status: The operation completed successfully.")
+            #print("Status: The operation completed successfully.")
+            ok = True
         elif (sw1, sw2) == (0x63, 0x0):
-            print("Status: The operation failed. Maybe auth is needed.")
-    
+            #print("Status: The operation failed. Maybe auth is needed.")
+            ok = False    
         i = i+1 
 
     typestring = toASCIIString(toBytes(typefield))
-    print(payload)
+    #print(payload)
     k2 = bytearray.fromhex(payload)
     return k2, typestring
 
-k1 = acquireK1()
+def main():
+    k1 = acquireK1()
+    
+    r = readers()
+    if len(r) < 1:
+        print("error: No readers available")
+        sys.exit()
+    
+    #print("Available readers: ", r)
 
-r = readers()
-if len(r) < 1:
-	print("error: No readers available!")
-	sys.exit()
+    reader = r[0]
+    #print("Using: ", reader)
 
-print("Available readers: ", r)
+    connection = reader.createConnection()
+    while(True):
+        if(waitCard(connection)):
+            print("Smartcard revealed")
+            break
+        else:
+            time.sleep(5)
+            continue
 
-reader = r[0]
-print("Using: ", reader)
+    k2, typestring = readCard(connection)
+    #print("Type: " + typestring)
+    print("K1 = ", k1.hex())
+    print("K2 = ", k2.hex())
 
-connection = reader.createConnection()
-while(True):
-    if(waitCard(connection)):
-        print("Smartcard revealed")
-        break
-    else:
-        time.sleep(5)
-        continue
+    master_key = generateFinalKnowledge(k1, k2)
+    
+    print("MK = ", master_key.hex())
 
-k2, typestring = readCard(connection)
-print("Type: " + typestring)
-print(k2)
+    def on_publish(client,userdata,result):             #create function for callback
+        print("Published message to braintech/masterdegree/test topic")
+        pass
 
-master_key = generateFinalKnowledge(k1, k2)
+    #broker_address="192.168.1.184" 
+    broker_address="broker.hivemq.com" #use external broker
+    print("Creating new publisher instance")
+    client = mqtt.Client("braintech_publisher") #create new instance
+    client.on_publish = on_publish
+    #print("connecting to broker")
+    client.connect(broker_address) #connect to broker
 
-def on_publish(client,userdata,result):             #create function for callback
-    print("data published\n")
-    pass
-
-#broker_address="192.168.1.184" 
-broker_address="broker.hivemq.com" #use external broker
-print("creating new publisher instance")
-client = mqtt.Client("braintech_publisher") #create new instance
-client.on_publish = on_publish
-print("connecting to broker")
-client.connect(broker_address) #connect to broker
-
-message = "This is a test message from publisher"
-cipher = AES.new(master_key, AES.MODE_ECB)
-paddedtext = pad(message.encode("utf-8"), AES.block_size)
-print(paddedtext)
-message = cipher.encrypt(paddedtext)
-print(message)
-byteArr = bytearray(message)
-print("Publishing to topic","braintech/tesi/test1")
-client.publish("braintech/tesi/test1", byteArr) #publish
+    message = b'This is a test message from publisher'
+    cipher = AES.new(master_key, AES.MODE_ECB)
+    print("Message = ", "This is a test message from publisher")
+    paddedtext = pad(message, AES.block_size)
+    #print(paddedtext)
+    ciphertext = cipher.encrypt(paddedtext)
+    print("Encrypted message = ", ciphertext.hex())
+    byteArr = bytearray(ciphertext)
+    #client.publish("braintech/tesi/test1", byteArr) #publish
+    client.publish("braintech/masterdegree/test", byteArr) #publish
+    
+main()
